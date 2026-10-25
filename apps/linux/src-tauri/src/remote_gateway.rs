@@ -1037,6 +1037,8 @@ pub(crate) fn start_tunnel(
         })?;
 
     let mut command = Command::new(executable);
+    #[cfg(not(target_os = "windows"))]
+    crate::host_process::use_host_libraries(&mut command);
     command.args([
         "-N",
         "-L",

@@ -128,6 +128,8 @@ impl OpenClawCli {
             .unwrap_or_else(|| Command::new(&self.executable));
         #[cfg(not(target_os = "windows"))]
         let mut command = Command::new(&self.executable);
+        #[cfg(not(target_os = "windows"))]
+        crate::host_process::use_host_libraries(&mut command);
         command.args(args);
         command.env("PATH", self.command_path()?);
         command.stdin(Stdio::null());
@@ -438,6 +440,61 @@ mod tests {
         assert!(cli.is_available());
         assert!(cli.output(["--version"]).is_err());
         assert!(!cli.is_available());
+    }
+
+    /// Runs the calling test again in a child test process with the given APPDIR
+    /// and LD_LIBRARY_PATH; returns true in the child, which runs the body.
+    #[cfg(not(target_os = "windows"))]
+    fn in_child_process_with(appdir: Option<&str>, library_path: &str) -> bool {
+        const CHILD: &str = "OPENCLAW_HOST_LIBRARIES_CHILD";
+        if std::env::var_os(CHILD).is_some() {
+            return true;
+        }
+        let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+        command
+            .args(["--exact", std::thread::current().name().unwrap()])
+            .env(CHILD, "1")
+            .env("LD_LIBRARY_PATH", library_path);
+        match appdir {
+            Some(appdir) => command.env("APPDIR", appdir),
+            None => command.env_remove("APPDIR"),
+        };
+        let output = command.output().unwrap();
+        assert!(
+            output.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("test result: ok. 1 passed"));
+        false
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    fn library_path_seen_by_cli_program() -> String {
+        let cli = OpenClawCli::new(PathBuf::from("/bin/sh"), PathBuf::new());
+        let output = cli
+            .output(["-c", "printf '%s' \"${LD_LIBRARY_PATH-unset}\""])
+            .unwrap();
+        assert!(output.status.success(), "probe failed: {output:?}");
+        String::from_utf8_lossy(&output.stdout).into_owned()
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn cli_programs_do_not_inherit_the_appimage_libraries() {
+        let bundle = "/tmp/.mount_oc/usr/lib/:/tmp/.mount_oc/usr/lib/x86_64-linux-gnu/:";
+        if in_child_process_with(Some("/tmp/.mount_oc"), bundle) {
+            assert_eq!(library_path_seen_by_cli_program(), "unset");
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn outside_an_appimage_cli_programs_keep_their_library_path() {
+        if in_child_process_with(None, "/opt/cuda/lib64") {
+            assert_eq!(library_path_seen_by_cli_program(), "/opt/cuda/lib64");
+        }
     }
 }
 

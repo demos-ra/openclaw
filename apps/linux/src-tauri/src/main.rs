@@ -23,6 +23,8 @@ mod gateway_sleep_logind_listener;
 mod gateway_sleep_tests;
 mod gateway_windows;
 mod gateway_ws;
+#[cfg(not(target_os = "windows"))]
+mod host_process;
 mod installer;
 mod keep_awake;
 mod keep_awake_platform;
