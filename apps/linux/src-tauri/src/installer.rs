@@ -6,7 +6,9 @@ use std::collections::VecDeque;
 #[cfg(any(target_os = "windows", test))]
 use std::io::Write;
 use std::io::{BufRead, BufReader};
-use std::process::{Command, Stdio};
+#[cfg(target_os = "windows")]
+use std::process::Command;
+use std::process::Stdio;
 use std::sync::mpsc;
 use std::thread;
 #[cfg(not(target_os = "windows"))]
@@ -198,8 +200,7 @@ fn install_at(
             .path()
             .resolve("install-cli.sh", BaseDirectory::Resource)
             .map_err(|error| format!("Bundled installer is unavailable: {error}"))?;
-        let mut command = Command::new("bash");
-        crate::host_process::use_host_libraries(&mut command);
+        let mut command = crate::cli::host_command("bash");
         command
             .arg(script)
             .args(["--json", "--no-onboard", "--prefix"])

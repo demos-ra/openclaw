@@ -437,7 +437,8 @@ fn install(
     command
         .arg("--expected-runtime-pin")
         .arg(serde_json::to_string(&confirmed.expected_pin()?).map_err(|error| error.to_string())?)
-        .env_remove("OPENCLAW_SQLITE_LIBRARY");
+        .env_remove("OPENCLAW_SQLITE_LIBRARY")
+        .env_remove("LD_LIBRARY_PATH");
     if let Some(sqlite) = &runtime.sqlite {
         command.env("OPENCLAW_SQLITE_LIBRARY", sqlite);
     }

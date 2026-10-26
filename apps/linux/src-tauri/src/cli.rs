@@ -11,6 +11,15 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+// AppImage libraries belong to the companion and WebKit, not its host programs.
+pub(crate) fn host_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
+    let mut command = Command::new(program);
+    if !cfg!(target_os = "windows") && env::var_os("APPDIR").is_some() {
+        command.env_remove("LD_LIBRARY_PATH");
+    }
+    command
+}
+
 pub(crate) type SpawnCommand<'a> = dyn Fn(&mut Command) -> Result<Child, String> + 'a;
 
 const DEFAULT_EXECUTABLE: &str = if cfg!(target_os = "windows") {
@@ -125,11 +134,9 @@ impl OpenClawCli {
         #[cfg(target_os = "windows")]
         let mut command = crate::runtime_action::managed_command(self)
             .map_err(CliError::Environment)?
-            .unwrap_or_else(|| Command::new(&self.executable));
+            .unwrap_or_else(|| host_command(&self.executable));
         #[cfg(not(target_os = "windows"))]
-        let mut command = Command::new(&self.executable);
-        #[cfg(not(target_os = "windows"))]
-        crate::host_process::use_host_libraries(&mut command);
+        let mut command = host_command(&self.executable);
         command.args(args);
         command.env("PATH", self.command_path()?);
         command.stdin(Stdio::null());
@@ -441,7 +448,6 @@ mod tests {
         assert!(cli.output(["--version"]).is_err());
         assert!(!cli.is_available());
     }
-
     /// Runs the calling test again in a child test process with the given APPDIR
     /// and LD_LIBRARY_PATH; returns true in the child, which runs the body.
     #[cfg(not(target_os = "windows"))]
